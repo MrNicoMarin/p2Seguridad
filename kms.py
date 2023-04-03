@@ -1,7 +1,9 @@
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from google.cloud import kms_v1, storage 
 import os
-import argparse
+from os import environ, listdir
+from kms import bucketName, localFolder, bucketFolder
+from os.path import isfile, join
 
 class KMS():
 
@@ -52,7 +54,7 @@ class KMS():
         
 
 
-""" How to use 
+
 kms = KMS()
 kms.list_keyrings()
 
@@ -70,49 +72,41 @@ print("KEK: ", plain_dek)
 decrypted_dek = kms.decrypt_dek("nico_test", crypted_kek)
 
 print("Decrypted KEK", decrypted_dek)
-"""
 
 
-# Upload files to the Google Cloud Storage bucket
-class GCS():
-    def __init__(self, bucket_name):
-        self.bucket_name = bucket_name
-        self.storage_client = storage.Client()
 
-    def upload_file(self, source_file_path):
-        # Extract the filename and create a folder with the same name
-        filename = os.path.basename(source_file_path)
-        folder_name = os.path.splitext(filename)[0]
-        folder_blob = self.bucket_name.blob(folder_name)
-        folder_blob.upload_from_string('')
+### Google Cloud Storage ###
 
-        # Upload the file to the created folder
-        folder_path = f'{folder_name}/{filename}'
-        blob = self.storage_client.bucket(self.bucket_name).blob(folder_path)
-        blob.upload_from_filename(source_file_path)
+bucketName = environ.get('Bucket_Grupo_D')
+bucketFolder = environ.get('BUCKET_FOLDER_Grupo_D') # Folder for all subfolders with the files
+localFolder = environ.get('LOCAL_FOLDER') # Folder for the data
 
-        print(f"File {source_file_path} uploaded to {folder_path} in bucket {self.bucket_name}")
+# Object representing our bucket
+storage_client = storage.Client()
+bucket = storage_client.get_bucket(bucketName)
 
+# Upload files to GCS bucket
+def upload_files(bucketName):
+    files = [f for f in listdir(localFolder) if isfile(join(localFolder, f))]
+    for file in files: 
+        localFile = localFolder + file
+        blob = bucket.blob(bucketFolder + file) # Set the desired destination of each file
+        blob.upload_from_filename(localFile)
+    return f'Uploaded {files} to "{bucketName}" bucket.'
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Manage files in Google Cloud Storage.')
-    subparsers = parser.add_subparsers(title='commands', dest='command', help='Available commands')
+# List files in GCS bucket
+def list_files(bucketName):
+    files = bucket.list_blobs(prefix=bucketFolder)
+    fileList = [file.name for file in files if '.' in file.name]
+    return fileList
 
-    # Create the parser for the "upload" command
-    upload_parser = subparsers.add_parser('upload', help='Upload a file to Google Cloud Storage.')
-    upload_parser.add_argument('file_path', type=str, help='The path to the file to upload.')
-    upload_parser.add_argument('--bucket', type=str, default='my-bucket', help='The name of the Google Cloud Storage bucket to use.')
-    upload_parser.add_argument('--encryption', choices=['none', 'CSE', 'SSE'], default='none', help='Encryption mode')
+# Delete files in GCS bucket
+def delete_file(bucketName, bucketFolder, fileName):
+    bucket.delete_blob(bucketFolder + fileName)
+    return f'{fileName} deleted from bucket.'
 
-    # Parse the arguments
-    args = parser.parse_args()
-
-    if args.command == 'upload':
-        gcs = GCS(args.bucket)
-
-        # Determine encryption mode
-        if args.encryption == 'CSE':
-            encryption_key = input('Enter encryption key: ')
-            gcs.upload_file_cse(args.file_path, args.file_path, encryption_key)
-        else:
-            gcs.upload_file(args.file_path, args.file_path)
+# 
+def rename_file(bucketName, bucketFolder, fileName, newFileName):
+    blob = bucket.blob(bucketFolder + fileName)
+    bucket.rename_blob(blob,new_name=newFileName)
+    return f'{fileName} renamed to {newFileName}.'
