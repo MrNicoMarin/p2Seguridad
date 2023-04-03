@@ -79,19 +79,40 @@ class GCS():
         self.bucket_name = bucket_name
         self.storage_client = storage.Client()
 
-    def upload_file(self, source_file_path, destination_blob_name):
-        bucket = self.storage_client.bucket(self.bucket_name)
-        blob = bucket.blob(destination_blob_name)
+    def upload_file(self, source_file_path):
+        # Extract the filename and create a folder with the same name
+        filename = os.path.basename(source_file_path)
+        folder_name = os.path.splitext(filename)[0]
+        folder_blob = self.bucket_name.blob(folder_name)
+        folder_blob.upload_from_string('')
+
+        # Upload the file to the created folder
+        folder_path = f'{folder_name}/{filename}'
+        blob = self.storage_client.bucket(self.bucket_name).blob(folder_path)
         blob.upload_from_filename(source_file_path)
-        print(f"File {source_file_path} uploaded to {destination_blob_name} in bucket {self.bucket_name}")
+
+        print(f"File {source_file_path} uploaded to {folder_path} in bucket {self.bucket_name}")
+
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Upload a file to Google Cloud Storage.')
-    parser.add_argument('file_name', type=str, help='The name of the file to upload.')
-    parser.add_argument('blob_name', type=str, help='The name of the blob to create in the Google Cloud Storage bucket.')
-    parser.add_argument('--bucket', type=str, default='my-bucket', help='The name of the Google Cloud Storage bucket to use.')
+    parser = argparse.ArgumentParser(description='Manage files in Google Cloud Storage.')
+    subparsers = parser.add_subparsers(title='commands', dest='command', help='Available commands')
+
+    # Create the parser for the "upload" command
+    upload_parser = subparsers.add_parser('upload', help='Upload a file to Google Cloud Storage.')
+    upload_parser.add_argument('file_path', type=str, help='The path to the file to upload.')
+    upload_parser.add_argument('--bucket', type=str, default='my-bucket', help='The name of the Google Cloud Storage bucket to use.')
+    upload_parser.add_argument('--encryption', choices=['none', 'CSE', 'SSE'], default='none', help='Encryption mode')
+
+    # Parse the arguments
     args = parser.parse_args()
 
-    file_path = os.path.abspath(args.file_name)
-    gcs = GCS(args.bucket)
-    gcs.upload_file(file_path, args.blob_name)
+    if args.command == 'upload':
+        gcs = GCS(args.bucket)
+
+        # Determine encryption mode
+        if args.encryption == 'CSE':
+            encryption_key = input('Enter encryption key: ')
+            gcs.upload_file_cse(args.file_path, args.file_path, encryption_key)
+        else:
+            gcs.upload_file(args.file_path, args.file_path)
