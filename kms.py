@@ -1,6 +1,7 @@
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from google.cloud import kms_v1
+from google.cloud import kms_v1, storage 
 import os
+import argparse
 
 class KMS():
 
@@ -70,3 +71,27 @@ decrypted_dek = kms.decrypt_dek("nico_test", crypted_kek)
 
 print("Decrypted KEK", decrypted_dek)
 """
+
+
+# Upload files to the Google Cloud Storage bucket
+class GCS():
+    def __init__(self, bucket_name):
+        self.bucket_name = bucket_name
+        self.storage_client = storage.Client()
+
+    def upload_file(self, source_file_path, destination_blob_name):
+        bucket = self.storage_client.bucket(self.bucket_name)
+        blob = bucket.blob(destination_blob_name)
+        blob.upload_from_filename(source_file_path)
+        print(f"File {source_file_path} uploaded to {destination_blob_name} in bucket {self.bucket_name}")
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Upload a file to Google Cloud Storage.')
+    parser.add_argument('file_name', type=str, help='The name of the file to upload.')
+    parser.add_argument('blob_name', type=str, help='The name of the blob to create in the Google Cloud Storage bucket.')
+    parser.add_argument('--bucket', type=str, default='my-bucket', help='The name of the Google Cloud Storage bucket to use.')
+    args = parser.parse_args()
+
+    file_path = os.path.abspath(args.file_name)
+    gcs = GCS(args.bucket)
+    gcs.upload_file(file_path, args.blob_name)
