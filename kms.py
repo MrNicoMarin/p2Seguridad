@@ -75,38 +75,49 @@ print("Decrypted KEK", decrypted_dek)
 
 
 
-### Google Cloud Storage ###
+#Google Cloud Storage
+class GCS():
+    bucketName = environ.get('Bucket_Grupo_D')
+    bucketFolder = environ.get('Folder_Grupo_D') # Folder for all subfolders with the files
+    localFolder = environ.get('Local_Folder') # Folder for the data
 
-bucketName = environ.get('Bucket_Grupo_D')
-bucketFolder = environ.get('BUCKET_FOLDER_Grupo_D') # Folder for all subfolders with the files
-localFolder = environ.get('LOCAL_FOLDER') # Folder for the data
+    # Object representing our bucket
+    storage_client = storage.Client()
+    bucket = storage_client.get_bucket(bucketName)
 
-# Object representing our bucket
-storage_client = storage.Client()
-bucket = storage_client.get_bucket(bucketName)
+    # Upload files to GCS bucket
+    def upload_files(bucket, bucketName):
+        files = [f for f in listdir(localFolder) if isfile(join(localFolder, f))]
+        for file in files: 
+            fileName = localFolder + file
+            blob = bucket.blob(bucketFolder + file) # Set the desired destination of each file
+            blob.upload_from_filename(fileName)
+        return f'Uploaded {files} to "{bucketFolder}" in "{bucketName}".'
+    
+    # Download files from GCS bucket
+    def download_file(bucket, fileName):
+        blob = bucket.blob(bucketFolder + fileName)
+        if blob.exists():
+            blob.download_to_filename(localFolder + fileName)
+            return f'{fileName} downloaded from bucket.'
+        else:
+            return f'{fileName} does not exist in bucket.'
 
-# Upload files to GCS bucket
-def upload_files(bucketName):
-    files = [f for f in listdir(localFolder) if isfile(join(localFolder, f))]
-    for file in files: 
-        localFile = localFolder + file
-        blob = bucket.blob(bucketFolder + file) # Set the desired destination of each file
-        blob.upload_from_filename(localFile)
-    return f'Uploaded {files} to "{bucketName}" bucket.'
+    # List files in GCS bucket lokalFile
+    def list_files(bucket):
+        files = bucket.list_blobs(prefix=bucketFolder)
+        fileList = [file.name for file in files if '.' in file.name]
+        return fileList
+    
+    
+    print("Type device id:")
+    input = int(input("Enter 'u' to upload a file, 'd' to download a file or 'l' to list all files"))
 
-# List files in GCS bucket
-def list_files(bucketName):
-    files = bucket.list_blobs(prefix=bucketFolder)
-    fileList = [file.name for file in files if '.' in file.name]
-    return fileList
+    if input == 'u':
+        print(kms.upload_files(bucket, bucketName))
 
-# Delete files in GCS bucket
-def delete_file(bucketName, bucketFolder, fileName):
-    bucket.delete_blob(bucketFolder + fileName)
-    return f'{fileName} deleted from bucket.'
+    if input == 'd':
+        print(kms.download_file(bucket))
 
-# 
-def rename_file(bucketName, bucketFolder, fileName, newFileName):
-    blob = bucket.blob(bucketFolder + fileName)
-    bucket.rename_blob(blob,new_name=newFileName)
-    return f'{fileName} renamed to {newFileName}.'
+    elif input == 'l':
+        print(kms.list_files(bucket))
