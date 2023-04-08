@@ -29,6 +29,13 @@ dropzone_force_chunking = "true"
 lock = Lock()
 chucks = defaultdict(list)
 
+chunks_arr = {}
+
+chunks_json = []
+file_json = []
+first_upload = True 
+
+metadata = []
 
 @error(500)
 def handle_500(error_message):
@@ -133,14 +140,6 @@ def index():
 </body>
 </html>
     """
-
-chunks_arr = {}
-
-chunks_json = []
-file_json = []
-first_upload = True 
-
-metadata = []
 
 @route("/upload", method="POST")
 def upload():
