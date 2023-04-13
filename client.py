@@ -4,46 +4,65 @@ import sys
 from cryptography.fernet import Fernet
 import datetime
 import json
+from kms import KMS
 
 
 class Client:
 
     def __init__(self):
 
-        # set the folder path for local file uploads
+        # Set the folder path for local file uploads
         self.desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
         self.folder_path = os.path.join(self.desktop_path, "Uploads")
 
         if not os.path.exists(self.folder_path):
             os.makedirs(self.folder_path)
 
-        # Generate a Fernet key
-        self.key = Fernet.generate_key()
+        # Instance of the KMS class
+        self.kms = KMS()
+        result = self.kms.create_new_kek("P2Seguridad-GrupoD-KEKforDEK-ClientSide")
+        if result:
+            print("KEK created")
+        else:
+            print("KEK already created")
 
-
-     # Encrypt the file using the Fernet key
+    # Encrypt the file using the KMS-encrypted Fernet key
     def encrypt(self, file_path):
         
         with open(file_path, "rb") as f:
             data = f.read()
-
-        fernet = Fernet(self.key)
+        
+        # Encrypt the Fernet key with the KMS KEK
+        plain_dek,crypted_kek = self.kms.create_new_dek("P2Seguridad-GrupoD-KEKforDEK-ClientSide")
+        
+        # Write the encrypted Fernet key to .key file
+        with open(file_path + ".key", "wb") as f:
+            f.write(crypted_kek)
+        
+        # Use the Fernet key to encrypt the file
+        fernet = Fernet(plain_dek)
         encrypted = fernet.encrypt(data)
-
-        # Write the encrypted data to the file
+        
         with open(file_path, "wb") as f:
             f.write(encrypted)
+    
 
-
-    # Decrypt the file using the Fernet key
+    # Decrypt the file using the KMS-encrypted Fernet key
     def decrypt(self, file_path):
         with open(file_path, "rb") as f:
             data = f.read()
-
-        fernet = Fernet(self.key)
+        
+        # Read the KMS-encrypted Fernet key from .key file
+        with open(file_path + ".key", "rb") as f:
+            encrypted_key = f.read()
+        
+        # Decrypt the KMS-encrypted Fernet key
+        decrypted_dek = self.kms.decrypt_dek("P2Seguridad-GrupoD-KEKforDEK-ClientSide", encrypted_key)
+        
+        # Use the decrypted Fernet key to decrypt the file
+        fernet = Fernet(decrypted_dek)
         decrypted = fernet.decrypt(data)
-
-        # Write the decrypted data to the file
+        
         with open(file_path, "wb") as f:
             f.write(decrypted)
 
@@ -51,12 +70,12 @@ class Client:
     def upload_file(self):
         filename = input("Enter the name of the file to upload (include file extension): ")
 
-        # create a subfolder with the same name as the file to upload
+        # Create a subfolder with the same name as the file to upload
         subfolder_path = os.path.join(self.folder_path, os.path.splitext(filename)[0])
         if not os.path.exists(subfolder_path):
             os.makedirs(subfolder_path)
 
-        # construct the full path of the file to upload
+        # Construct the full path of the file to upload
         file_path = os.path.join(subfolder_path, filename)
 
         if os.path.exists(file_path):
@@ -68,21 +87,13 @@ class Client:
             upload_path = input("Enter the path of the file to upload: ")
             if os.path.exists(upload_path):
                 try:
-                    # copy the file to the subfolder
+                    # Copy the file to the subfolder
                     shutil.copy(upload_path, file_path)
                     # Encrypt the file before uploading
                     self.encrypt(file_path)
                     print(f"\n{filename} has been successfully uploaded.")
-                    # Save metadata in a file
-                    metadata = {
-                        "filename": filename,
-                        "size": os.path.getsize(file_path),
-                        "upload_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                    with open(os.path.join(subfolder_path, "metadata"), "w") as f:
-                        json.dump(metadata, f)
-                    print("Key : ", self.key.decode())
                     break
+
                 except shutil.Error as e:
                     print(f"Error uploading file: {e}")
             else:
@@ -93,7 +104,8 @@ class Client:
         print("List of all uploaded files:")
         for root, _, files in os.walk(self.folder_path):
             for filename in files:
-                print(f"- {filename}")
+                if not filename.endswith('.key'):
+                    print(f"- {filename}")
 
 
     def download_file(self):
@@ -102,7 +114,7 @@ class Client:
         for root, _, files in os.walk(self.folder_path):
             if filename in files:
                 file_path = os.path.join(root, filename)
-                #Decrypt file before downloading
+                # Decrypt file before downloading
                 self.decrypt(file_path)
                 download_path = os.path.join(os.path.expanduser("~"), "Downloads", filename)
                 try:
