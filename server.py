@@ -12,6 +12,8 @@ from bottle import route, run, request, error, response, HTTPError, static_file
 from werkzeug.utils import secure_filename
 from cryptography.fernet import Fernet
 import json
+from kms import KMS
+import base64
 
 storage_path: Path = Path(__file__).parent / "storage"
 chunk_path: Path = Path(__file__).parent / "chunk"
@@ -29,12 +31,10 @@ dropzone_force_chunking = "true"
 lock = Lock()
 chucks = defaultdict(list)
 
-chunks_arr = {}
-
 chunks_json = []
 file_json = []
 first_upload = True 
-
+kms = None
 metadata = []
 
 @error(500)
@@ -143,6 +143,8 @@ def index():
 
 @route("/upload", method="POST")
 def upload():
+    
+    key, crypted_dek = kms.create_new_dek("P2Seguridad-GrupoD-KEKforDEK-ServerSide")
 
     global first_upload
     global chunks_json
@@ -156,19 +158,21 @@ def upload():
         raise HTTPError(status=400, body="No file provided")
 
     
-    key = Fernet.generate_key()
+    # key = Fernet.generate_key()
+    # response = kms_v1.encrypt(
+    #     KeyId=plain_dek,
+    #     Plaintext=plaintext
+    # )
     fernet = Fernet(key)
     chunk_data = file.file.read()
     encrypted_chunk = fernet.encrypt(chunk_data)
 
     chunk_info = {
         "index": int(request.forms["dzchunkindex"]),
-        "key": key.decode('utf-8')
+        "key": base64.b64encode(crypted_dek).decode('utf-8'), 
     }
 
     chunks_json.append(chunk_info)
-
-    chunks_arr[int(request.forms["dzchunkindex"])] = key
     
     dz_uuid = request.forms.get("dzuuid")
 
@@ -217,13 +221,6 @@ def upload():
         with open(project_path / f"metadata.json", "wb") as f:
             f.write(metadata.encode('utf-8'))
 
-        # with open(storage_path / f"{dz_uuid}_{secure_filename(file.filename)}", "wb") as f:
-        #     for file_number in range(total_chunks):
-        #         key = chunks_arr[file_number]
-        #         fernet = Fernet(key)
-        #         encrypted_chunk = (save_dir / str(file_number)).read_bytes()
-        #         decrypted = fernet.decrypt(encrypted_chunk)
-                # f.write(decrypted)
         print(f"{file.filename} has been uploaded")
         # shutil.rmtree(save_dir)
 
@@ -251,7 +248,8 @@ def download(dz_uuid):
     for item in chunks_metadata:
         index = item["index"]
         with open(chunk_path / dz_uuid / f"{index}", "rb") as f:
-            key = item["key"]
+            crypted_key = item["key"]
+            key = kms.decrypt_dek("P2Seguridad-GrupoD-KEKforDEK-ServerSide", base64.b64decode(crypted_key.encode('utf-8')))
             fernet = Fernet(key)
             encrypted_chunk = (chunk_path / dz_uuid / f"{index}").read_bytes()
             decrypted = fernet.decrypt(encrypted_chunk)
@@ -307,6 +305,13 @@ if __name__ == "__main__":
     except ValueError:
         raise Exception("Invalid dropzone option, make sure max-size, timeout, and chunk-size are all integers")
 
+    kms = KMS()
+    result = kms.create_new_kek("P2Seguridad-GrupoD-KEKforDEK-ServerSide")
+    if result:
+        print("KEK created")
+    else:
+        print("KEK already created")
+    
     if args.dz_cdn:
         dropzone_cdn = args.dz_cdn
     if args.dz_version:
