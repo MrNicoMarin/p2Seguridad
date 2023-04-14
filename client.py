@@ -120,6 +120,9 @@ class Client:
                 try:
                     shutil.copy(file_path, download_path)
                     print(f"\n{filename} has been successfully downloaded.")
+
+                    self.encrypt(file_path)
+                    break
                 except shutil.Error as e:
                     print(f"Error downloading file: {e}")
         else:
