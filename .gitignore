@@ -1,2 +1,5 @@
 env
+chunk
+storage
+metadata.json
 __pycache__
