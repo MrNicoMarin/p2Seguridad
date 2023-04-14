@@ -1,4 +1,4 @@
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.fernet import Fernet
 from google.cloud import kms_v1
 import os
 
@@ -35,7 +35,7 @@ class KMS():
             return False
         
     def create_new_dek(self, kek_id : str) -> tuple:
-        plain_key = AESGCM.generate_key(bit_length=256)
+        plain_key = Fernet.generate_key()
 
         kek_name = f"projects/{self.project_id}/locations/{self.location_id}/keyRings/{self.keyring_id}/cryptoKeys/{kek_id}"
         encrypt_response = self.client.encrypt(name=kek_name, plaintext=plain_key)

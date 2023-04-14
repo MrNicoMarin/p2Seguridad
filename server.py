@@ -19,7 +19,7 @@ storage_path: Path = Path(__file__).parent / "storage"
 chunk_path: Path = Path(__file__).parent / "chunk"
 project_path: Path = Path(__file__).parent
 
-allow_downloads = False
+allow_downloads = True
 dropzone_cdn = "https://cdnjs.cloudflare.com/ajax/libs/dropzone"
 dropzone_version = "5.7.6"
 dropzone_timeout = "120000"
