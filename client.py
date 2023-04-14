@@ -122,9 +122,6 @@ class Client:
                     print(f"\n{filename} has been successfully downloaded.")
                 except shutil.Error as e:
                     print(f"Error downloading file: {e}")
-                # Encrypt the file before uploading
-                self.encrypt(file_path)
-                break
         else:
             print(f"{filename} could not be found.")
 
