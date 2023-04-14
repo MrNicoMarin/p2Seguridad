@@ -54,7 +54,7 @@ class KMS():
         
 
 
-
+'''
 kms = KMS()
 kms.list_keyrings()
 
@@ -71,4 +71,4 @@ print("KEK: ", plain_dek)
 
 decrypted_dek = kms.decrypt_dek("nico_test", crypted_kek)
 
-print("Decrypted KEK", decrypted_dek)
+print("Decrypted KEK", decrypted_dek)'''
