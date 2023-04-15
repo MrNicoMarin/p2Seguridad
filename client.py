@@ -1,6 +1,8 @@
 import os
+import random
 import shutil
 import sys
+from typing import Self
 from cryptography.fernet import Fernet
 import datetime
 import json
@@ -128,10 +130,24 @@ class Client:
         else:
             print(f"{filename} could not be found.")
 
+  # Securely delete the key file by overwriting with zeros
+    def secure_delete(self, file_path):
+        with open(file_path, "r+b") as f:
+            file_size = os.path.getsize(file_path)
+            # Overwrite the file with zeros
+            for _ in range(file_size):
+                f.write(chr(48).encode())
+    # Securely delete the key file by overwriting with random data
+    def secure_delete_random(self, file_path):
+        with open(file_path, "r+b") as f:
+            file_size = os.path.getsize(file_path)
+            # Overwrite the file with random data
+            for _ in range(file_size):
+                f.write(bytes([random.randint(0, 255)]))
 
 client = Client()
 
-print("Command options: 'u' to upload a file, 'd' to download a file, 'l' to list all files or 'h' to see additional info or 'exit' to close the program.")
+print("Command options: 'u' to upload a file, 'd' to download a file, 'l' to list all files, 'secure_delete' to overwrite the key or 'h' to see additional info or 'exit' to close the program.")
 
 while True:
     user_input = input()
@@ -145,6 +161,29 @@ while True:
     elif user_input == 'l':
         client.list_files()
     
+    elif user_input == 'secure_delete':
+        # Obtener el nombre del archivo a eliminar de forma segura
+        filename = input("Enter the name of the key file to securely delete (include file extension): ")
+        file_name_without_extension = os.path.splitext(filename)[0] 
+        while os.path.splitext(file_name_without_extension)[1] != "":
+          file_name_without_extension = os.path.splitext(file_name_without_extension)[0] # Obtener el nombre del archivo sin extensión repetidamente hasta que no haya más extensiones
+        folder_path = os.path.join(client.folder_path, file_name_without_extension)
+        file_path = os.path.join(folder_path, filename)
+        print(file_path)
+
+        if os.path.exists(file_path):
+            secure_delete_option = input("Enter '0' to securely delete with zeros or '1' to securely delete with random data: ")
+            if secure_delete_option == '0':
+                client.secure_delete(file_path)
+                print(f"{filename} has been securely deleted with zeros.")
+            elif secure_delete_option == '1':
+                client.secure_delete_random(file_path)
+                print(f"{filename} has been securely deleted with random data.")
+            else:
+                print("Invalid option. Please try again.")
+        else:
+            print(f"{filename} could not be found.")
+
     elif user_input == 'exit':
         print("Exiting program...")
         sys.exit()
@@ -156,6 +195,7 @@ while True:
         print("d : All downloaded files are by default saved in your local 'Downloads' folder.")
         print("      To download a file you only have to enter the file name with its extention.")
         print("l : This will display a list of all uploaded files.")
+        print("secure_delete: To overwrite the key with zeros or random data.")
         print("exit : This will close the program.")
         print("\nEnter a new command: 'u', 'd', 'l', or 'exit'")
 
@@ -163,4 +203,4 @@ while True:
         print("Invalid command")
 
     if user_input != 'h':
-        print("\nEnter a new command: 'u', 'd', 'l', 'h' or 'exit'")
+        print("\nEnter a new command: 'u', 'd', 'l', 'h', 'secure_delete' or 'exit'")
