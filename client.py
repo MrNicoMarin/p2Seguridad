@@ -2,7 +2,6 @@ import os
 import random
 import shutil
 import sys
-from typing import Self
 from cryptography.fernet import Fernet
 import datetime
 import json
@@ -137,6 +136,10 @@ class Client:
             # Overwrite the file with zeros
             for _ in range(file_size):
                 f.write(chr(48).encode())
+        try:
+            os.remove(file_path)
+        except Exception as e:
+            print(f"No se pudo eliminar el archivo: {e}")
     # Securely delete the key file by overwriting with random data
     def secure_delete_random(self, file_path):
         with open(file_path, "r+b") as f:
@@ -144,6 +147,19 @@ class Client:
             # Overwrite the file with random data
             for _ in range(file_size):
                 f.write(bytes([random.randint(0, 255)]))
+        try:
+            os.remove(file_path)
+        except Exception as e:
+            print(f"No se pudo eliminar el archivo: {e}")
+
+    # Remove folder   
+    def delete_folder(self,folder_path):
+        try:
+            shutil.rmtree(folder_path)
+            print(f"Carpeta eliminada: {folder_path}")
+        except Exception as e:
+            print(f"No se pudo eliminar la carpeta: {e}")
+
 
 client = Client()
 
@@ -164,20 +180,24 @@ while True:
     elif user_input == 'secure_delete':
         # Obtener el nombre del archivo a eliminar de forma segura
         filename = input("Enter the name of the key file to securely delete (include file extension): ")
-        file_name_without_extension = os.path.splitext(filename)[0] 
-        while os.path.splitext(file_name_without_extension)[1] != "":
-          file_name_without_extension = os.path.splitext(file_name_without_extension)[0] # Obtener el nombre del archivo sin extensión repetidamente hasta que no haya más extensiones
+        file_name_without_extension = os.path.splitext(filename)[0]
         folder_path = os.path.join(client.folder_path, file_name_without_extension)
         file_path = os.path.join(folder_path, filename)
+        print(folder_path)
         print(file_path)
 
         if os.path.exists(file_path):
             secure_delete_option = input("Enter '0' to securely delete with zeros or '1' to securely delete with random data: ")
+            file_path_key = file_path + ".key"
             if secure_delete_option == '0':
                 client.secure_delete(file_path)
+                client.secure_delete(file_path_key)
+                client.delete_folder(folder_path)
                 print(f"{filename} has been securely deleted with zeros.")
             elif secure_delete_option == '1':
                 client.secure_delete_random(file_path)
+                client.secure_delete_random(file_path_key)
+                client.delete_folder(folder_path)
                 print(f"{filename} has been securely deleted with random data.")
             else:
                 print("Invalid option. Please try again.")
