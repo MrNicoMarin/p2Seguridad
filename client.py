@@ -28,9 +28,16 @@ class Client:
         else:
             print("KEK already created")
 
+    def modify_metadata(self,algorithm):
+        with open('metadata.json', 'r') as f:
+            metadata = json.load(f)  # Cargar el archivo JSON en una estructura de datos
+        metadata['algorithm'] = algorithm  # Modificar el dato deseado en la estructura de datos
+        with open('metadata.json', 'w') as f:
+            json.dump(metadata, f, indent=4)
+
     # Encrypt the file using the KMS-encrypted Fernet key
     def encrypt(self, file_path):
-        
+        self.modify_metadata(0)
         with open(file_path, "rb") as f:
             data = f.read()
         
@@ -49,31 +56,30 @@ class Client:
             f.write(encrypted)
     
     def encrypt_file_with_metadata(self, file_path):
-    # Generar una nueva clave AES para el archivo
-        metadata = "metadata.json"
-        with open(metadata, 'r') as metadata_file:
+    # Generate a new AES key for the file
+        self.modify_metadata(1)
+        with open("metadata.json", 'r') as metadata_file:
             metadata = json.load(metadata_file)
-        aad = json.dumps(metadata).encode()
-        nonce = os.urandom(12) # Generar un nonce aleatorio de 12 bytes
-        plain_dek,crypted_key = self.kms.create_new_dek_aesgcm("P2Seguridad-GrupoD-KEKforDEK-ClientSide")
 
+        aad = json.dumps(metadata).encode()
+        nonce = os.urandom(12) # Generate a random 12-byte nonce
+        plain_dek,crypted_key = self.kms.create_new_dek_aesgcm("P2Seguridad-GrupoD-KEKforDEK-ClientSide")
          # Write the encrypted AESGCM key to .key file
         with open(file_path + ".key", "wb") as f:
             f.write(crypted_key)
 
-        # Leer el contenido del archivo
+        # Read the contents of the file
         with open(file_path, 'rb') as file:
             plaintext = file.read()
         
         aesgcm = AESGCM(plain_dek)
-        # Encriptar el contenido del archivo con AEAD
+        # Encrypt the file content with AEAD
         ciphertext = aesgcm.encrypt(nonce, plaintext, aad)
 
-        # Escribir el archivo encriptado en disco
+        # Write the encrypted file to disk
         with open(file_path , 'wb') as encrypted_file:
             encrypted_file.write(nonce + ciphertext)
         
-        print('El archivo ha sido encriptado exitosamente con metadatos:', metadata)
         return file_path 
 
 
@@ -99,8 +105,7 @@ class Client:
 
     # Función para desencriptar un archivo con metadatos y AEAD
     def decrypt_file_with_metadata(self, file_path):
-        metadata = "metadata.json"
-        with open(metadata, 'r') as metadata_file:
+        with open("metadata.json", 'r') as metadata_file:
             metadata = json.load(metadata_file)
         aad = json.dumps(metadata).encode()
         # Extract the nonce, aad, and ciphertext from the encrypted file
@@ -111,7 +116,7 @@ class Client:
         with open(file_path + ".key", 'rb') as key_file:
             encrypted_key = key_file.read()
         
-        # Decrypt the KMS-encrypted Fernet key
+        # Decrypt the KMS-encrypted key
         plain_dek = self.kms.decrypt_dek("P2Seguridad-GrupoD-KEKforDEK-ClientSide", encrypted_key)
         # Create an AESGCM instance with the decrypted DEK
         aesgcm = AESGCM(plain_dek)
@@ -124,7 +129,6 @@ class Client:
         with open(decrypted_file_path, 'wb') as decrypted_file:
             decrypted_file.write(plaintext.encode('utf-8'))
         
-        print('El archivo ha sido desencriptado exitosamente con metadatos:', aad)
         return decrypted_file_path
 
 
@@ -151,10 +155,19 @@ class Client:
                     # Copy the file to the subfolder
                     shutil.copy(upload_path, file_path)
                     # Encrypt the file before uploading
-                    self.encrypt_file_with_metadata(file_path)
-                    print(f"\n{filename} has been successfully uploaded.")
-                    break
-
+                    while True:
+                        algorithm = input("Enter the algorithm to encrypt, 0 for Fernet or 1 AES+metadata: ")
+                        if(algorithm=="0"):
+                            self.encrypt(file_path)
+                            print(f"\n{filename} has been successfully uploaded.")
+                            break
+                        elif(algorithm=="1"):
+                            self.encrypt_file_with_metadata(file_path)
+                            print(f"\n{filename} has been successfully uploaded encrypted with metadada.")
+                            break
+                        else:
+                            print("Invalid algorithm. Please try again.")  
+                    break  
                 except shutil.Error as e:
                     print(f"Error uploading file: {e}")
             else:
@@ -175,14 +188,23 @@ class Client:
         for root, _, files in os.walk(self.folder_path):
             if filename in files:
                 file_path = os.path.join(root, filename)
+                # Look metadata
+                with open('metadata.json', 'r') as f:
+                    metadata = json.load(f)  # Load the JSON file into a data structure
+                encryption = metadata['algorithm']
                 # Decrypt file before downloading
-                self.decrypt_file_with_metadata(file_path)
+                if(encryption==0):
+                    self.decrypt(file_path)
+                elif(encryption==1):
+                    self.decrypt_file_with_metadata(file_path)
                 download_path = os.path.join(os.path.expanduser("~"), "Downloads", filename)
                 try:
                     shutil.copy(file_path, download_path)
                     print(f"\n{filename} has been successfully downloaded.")
-
-                    self.encrypt(file_path)
+                    if(encryption==0):
+                        self.encrypt(file_path)
+                    elif(encryption==1):
+                        self.encrypt_file_with_metadata(file_path)
                     break
                 except shutil.Error as e:
                     print(f"Error downloading file: {e}")
@@ -199,7 +221,7 @@ class Client:
         try:
             os.remove(file_path)
         except Exception as e:
-            print(f"No se pudo eliminar el archivo: {e}")
+            print(f"File could not be deleted: {e}")
     # Securely delete the key file by overwriting with random data
     def secure_delete_random(self, file_path):
         with open(file_path, "r+b") as f:
@@ -210,15 +232,14 @@ class Client:
         try:
             os.remove(file_path)
         except Exception as e:
-            print(f"No se pudo eliminar el archivo: {e}")
+            print(f"File could not be deleted: {e}")
 
     # Remove folder   
     def delete_folder(self,folder_path):
         try:
             shutil.rmtree(folder_path)
-            print(f"Carpeta eliminada: {folder_path}")
         except Exception as e:
-            print(f"No se pudo eliminar la carpeta: {e}")
+            print(f"The folder could not be deleted: {e}")
 
 
 
@@ -239,13 +260,11 @@ while True:
         client.list_files()
     
     elif user_input == 'secure_delete':
-        # Obtener el nombre del archivo a eliminar de forma segura
+        # Get the name of the file to be securely deleted
         filename = input("Enter the name of the key file to securely delete (include file extension): ")
         file_name_without_extension = os.path.splitext(filename)[0]
         folder_path = os.path.join(client.folder_path, file_name_without_extension)
         file_path = os.path.join(folder_path, filename)
-        print(folder_path)
-        print(file_path)
 
         if os.path.exists(file_path):
             secure_delete_option = input("Enter '0' to securely delete with zeros or '1' to securely delete with random data: ")
@@ -276,7 +295,7 @@ while True:
         print("d : All downloaded files are by default saved in your local 'Downloads' folder.")
         print("      To download a file you only have to enter the file name with its extention.")
         print("l : This will display a list of all uploaded files.")
-        print("secure_delete: To overwrite the key with zeros or random data.")
+        print("secure_delete: To overwrite the files with zeros or random data and delete.")
         print("exit : This will close the program.")
         print("\nEnter a new command: 'u', 'd', 'l', or 'exit'")
 
