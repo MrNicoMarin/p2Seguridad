@@ -3,6 +3,7 @@ import random
 import shutil
 import sys
 from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 import datetime
 import json
 from kms import KMS
@@ -47,6 +48,34 @@ class Client:
         with open(file_path, "wb") as f:
             f.write(encrypted)
     
+    def encrypt_file_with_metadata(self, file_path):
+    # Generar una nueva clave AES para el archivo
+        metadata = "metadata.json"
+        with open(metadata, 'r') as metadata_file:
+            metadata = json.load(metadata_file)
+        aad = json.dumps(metadata).encode()
+        nonce = os.urandom(12) # Generar un nonce aleatorio de 12 bytes
+        plain_dek,crypted_key = self.kms.create_new_dek_aesgcm("P2Seguridad-GrupoD-KEKforDEK-ClientSide")
+
+         # Write the encrypted AESGCM key to .key file
+        with open(file_path + ".key", "wb") as f:
+            f.write(crypted_key)
+
+        # Leer el contenido del archivo
+        with open(file_path, 'rb') as file:
+            plaintext = file.read()
+        
+        aesgcm = AESGCM(plain_dek)
+        # Encriptar el contenido del archivo con AEAD
+        ciphertext = aesgcm.encrypt(nonce, plaintext, aad)
+
+        # Escribir el archivo encriptado en disco
+        with open(file_path , 'wb') as encrypted_file:
+            encrypted_file.write(aad + nonce + ciphertext)
+        
+        print('El archivo ha sido encriptado exitosamente con metadatos:', metadata)
+        return file_path 
+
 
     # Decrypt the file using the KMS-encrypted Fernet key
     def decrypt(self, file_path):
@@ -66,6 +95,34 @@ class Client:
         
         with open(file_path, "wb") as f:
             f.write(decrypted)
+
+
+    # Función para desencriptar un archivo con metadatos y AEAD
+    def decrypt_file_with_metadata(self, file_path):
+        # Extract the nonce, aad, and ciphertext from the encrypted file
+        with open(file_path, 'rb') as encrypted_file:
+            aad = encrypted_file.read(80)
+            nonce = encrypted_file.read(12)
+            ciphertext = encrypted_file.read()
+        # Read the encrypted AESGCM key from .key file
+        with open(file_path + ".key", 'rb') as key_file:
+            encrypted_key = key_file.read()
+        
+        # Decrypt the KMS-encrypted Fernet key
+        plain_dek = self.kms.decrypt_dek("P2Seguridad-GrupoD-KEKforDEK-ClientSide", encrypted_key)
+        # Create an AESGCM instance with the decrypted DEK
+        aesgcm = AESGCM(plain_dek)
+
+        # Decrypt the ciphertext to plaintext
+        plaintext = aesgcm.decrypt(nonce, ciphertext, aad)
+        plaintext= plaintext.decode('utf-8')
+        # Write the decrypted plaintext to a new file
+        decrypted_file_path = file_path
+        with open(decrypted_file_path, 'wb') as decrypted_file:
+            decrypted_file.write(plaintext.encode('utf-8'))
+        
+        print('El archivo ha sido desencriptado exitosamente con metadatos:', aad)
+        return decrypted_file_path
 
 
     def upload_file(self):
@@ -159,6 +216,7 @@ class Client:
             print(f"Carpeta eliminada: {folder_path}")
         except Exception as e:
             print(f"No se pudo eliminar la carpeta: {e}")
+
 
 
 client = Client()

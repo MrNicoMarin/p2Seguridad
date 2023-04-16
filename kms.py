@@ -1,4 +1,6 @@
 from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives import serialization
 from google.cloud import kms_v1
 import os
 
@@ -43,12 +45,25 @@ class KMS():
         
         return plain_key, encrypted_key
     
+    def create_new_dek_aesgcm(self, kek_id : str) -> tuple:
+        # Generar una clave de encriptación aleatoria
+        plain_key = AESGCM.generate_key(bit_length=256)
+        
+        # Crear un nombre de clave (KEK)
+        kek_name = f"projects/{self.project_id}/locations/{self.location_id}/keyRings/{self.keyring_id}/cryptoKeys/{kek_id}"
+        
+        # Encriptar la clave de encriptación generada
+        encrypt_response = self.client.encrypt(name=kek_name, plaintext=plain_key)
+        encrypted_key = encrypt_response.ciphertext
+        
+        return plain_key, encrypted_key
+    
     def decrypt_dek(self, kek_id : str, encrypted_key : bytes) -> bytes:
         kek_name = f"projects/{self.project_id}/locations/{self.location_id}/keyRings/{self.keyring_id}/cryptoKeys/{kek_id}"
         decrypt_response = self.client.decrypt(name=kek_name, ciphertext=encrypted_key)
         decrypted_key = decrypt_response.plaintext
         return decrypted_key
-        
+    
 
 
 '''
