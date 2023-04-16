@@ -28,16 +28,21 @@ class Client:
         else:
             print("KEK already created")
 
-    def modify_metadata(self,algorithm):
-        with open('metadata.json', 'r') as f:
-            metadata = json.load(f)  # Cargar el archivo JSON en una estructura de datos
+    def modify_metadata(self,algorithm, file_path):
+        try:
+            with open(file_path + '.metadata.json', 'r') as f:
+                metadata = json.load(f)  # Cargar el archivo JSON en una estructura de datos
+        except FileNotFoundError:
+            metadata = {}
+            metadata['last_modification'] = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
         metadata['algorithm'] = algorithm  # Modificar el dato deseado en la estructura de datos
-        with open('metadata.json', 'w') as f:
+        with open(file_path + '.metadata.json', 'w') as f:
             json.dump(metadata, f, indent=4)
 
     # Encrypt the file using the KMS-encrypted Fernet key
     def encrypt(self, file_path):
-        self.modify_metadata(0)
+        self.modify_metadata(0,file_path)
         with open(file_path, "rb") as f:
             data = f.read()
         
@@ -57,8 +62,8 @@ class Client:
     
     def encrypt_file_with_metadata(self, file_path):
     # Generate a new AES key for the file
-        self.modify_metadata(1)
-        with open("metadata.json", 'r') as metadata_file:
+        self.modify_metadata(1, file_path)
+        with open(file_path + ".metadata.json", 'r') as metadata_file:
             metadata = json.load(metadata_file)
 
         aad = json.dumps(metadata).encode()
@@ -105,7 +110,7 @@ class Client:
 
     # Función para desencriptar un archivo con metadatos y AEAD
     def decrypt_file_with_metadata(self, file_path):
-        with open("metadata.json", 'r') as metadata_file:
+        with open(file_path + ".metadata.json", 'r') as metadata_file:
             metadata = json.load(metadata_file)
         aad = json.dumps(metadata).encode()
         # Extract the nonce, aad, and ciphertext from the encrypted file
@@ -178,7 +183,7 @@ class Client:
         print("List of all uploaded files:")
         for root, _, files in os.walk(self.folder_path):
             for filename in files:
-                if not filename.endswith('.key'):
+                if not filename.endswith('.key') and not filename.endswith('.metadata.json'):
                     print(f"- {filename}")
 
 
@@ -189,7 +194,7 @@ class Client:
             if filename in files:
                 file_path = os.path.join(root, filename)
                 # Look metadata
-                with open('metadata.json', 'r') as f:
+                with open(file_path + '.metadata.json', 'r') as f:
                     metadata = json.load(f)  # Load the JSON file into a data structure
                 encryption = metadata['algorithm']
                 # Decrypt file before downloading
