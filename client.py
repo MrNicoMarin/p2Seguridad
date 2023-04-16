@@ -71,7 +71,7 @@ class Client:
 
         # Escribir el archivo encriptado en disco
         with open(file_path , 'wb') as encrypted_file:
-            encrypted_file.write(aad + nonce + ciphertext)
+            encrypted_file.write(nonce + ciphertext)
         
         print('El archivo ha sido encriptado exitosamente con metadatos:', metadata)
         return file_path 
@@ -99,9 +99,12 @@ class Client:
 
     # Función para desencriptar un archivo con metadatos y AEAD
     def decrypt_file_with_metadata(self, file_path):
+        metadata = "metadata.json"
+        with open(metadata, 'r') as metadata_file:
+            metadata = json.load(metadata_file)
+        aad = json.dumps(metadata).encode()
         # Extract the nonce, aad, and ciphertext from the encrypted file
         with open(file_path, 'rb') as encrypted_file:
-            aad = encrypted_file.read(80)
             nonce = encrypted_file.read(12)
             ciphertext = encrypted_file.read()
         # Read the encrypted AESGCM key from .key file
@@ -148,7 +151,7 @@ class Client:
                     # Copy the file to the subfolder
                     shutil.copy(upload_path, file_path)
                     # Encrypt the file before uploading
-                    self.encrypt(file_path)
+                    self.encrypt_file_with_metadata(file_path)
                     print(f"\n{filename} has been successfully uploaded.")
                     break
 
@@ -173,7 +176,7 @@ class Client:
             if filename in files:
                 file_path = os.path.join(root, filename)
                 # Decrypt file before downloading
-                self.decrypt(file_path)
+                self.decrypt_file_with_metadata(file_path)
                 download_path = os.path.join(os.path.expanduser("~"), "Downloads", filename)
                 try:
                     shutil.copy(file_path, download_path)
